@@ -1,0 +1,17 @@
+.env
+credentials.json
+token.json
+.browser-profile/
+.chrome-profile/
+.venv/
+node_modules/
+logs/
+outputs/
+runtime/
+secrets/
+*.pyc
+__pycache__/
+*.zip
+*.xlsx
+
+src/*.egg-info/

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "schedule"
+version = "0.1.0"
+description = "Read worked shifts from schedules and synchronize them with Bitrix24."
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl>=3.1,<4",
+    "playwright>=1.58,<2",
+]
+
+[project.scripts]
+schedule-parse = "schedule.cli:main"
+schedule-check-bitrix = "schedule.check_bitrix:main"
+schedule-google-login = "schedule.google_login:main"
+schedule-google-export = "schedule.google_export:main"
+schedule-dry-run = "schedule.dry_run:main"
+schedule-stage-mismatch-report = "schedule.stage_mismatch_report:main"
+schedule-analyze-sources = "schedule.analyze_sources:main"
+schedule-not-found-review = "schedule.not_found_review:main"
+schedule-not-found-notifications = "schedule.not_found_notifications:main"
+schedule-notification-recipients = "schedule.notification_recipients:main"
+schedule-bitrix-without-schedule-report = "schedule.bitrix_without_schedule_report:main"
+schedule-new-notification-issues = "schedule.new_notification_issues:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
