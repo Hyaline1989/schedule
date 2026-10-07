@@ -34,6 +34,8 @@ class EmployeeShiftSummary:
     status_marker: str | None = None
     status_marker_date: date | None = None
     status_comment: str | None = None
+    first_shift_date: date | None = None
+    fifth_shift_date: date | None = None
 
 
 def build_employee_summaries(
@@ -93,6 +95,7 @@ def build_employee_summaries(
 
         count = len(dates)
         completed_count = len({item for item in dates if item != today})
+        completed_dates = sorted(item for item in dates if item < today)
         status_marker = _latest_status_marker(employee_markers)
         status_rule = _status_rule(status_marker.marker) if status_marker else None
         stage = status_rule[0] if status_rule else (
@@ -115,6 +118,8 @@ def build_employee_summaries(
                 status_marker=status_marker.marker if status_marker else None,
                 status_marker_date=status_marker.marker_date if status_marker else None,
                 status_comment=status_rule[1] if status_rule else None,
+                first_shift_date=completed_dates[0] if completed_dates else None,
+                fifth_shift_date=completed_dates[4] if len(completed_dates) >= 5 else None,
             )
         )
 

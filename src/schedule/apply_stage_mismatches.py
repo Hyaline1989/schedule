@@ -10,6 +10,7 @@ from schedule.bitrix import BitrixClient, DealUpdate
 from schedule.config import load_env_file
 from schedule.max_notifications import MaxNotificationRouter
 from schedule.object_managers import ObjectManagerResolver
+from schedule.premium_milestones import ensure_premium_milestones, PremiumMilestoneError, FIRST_FIELD, FIFTH_FIELD
 
 
 STAGE_NAMES = {
@@ -61,7 +62,9 @@ def main() -> None:
         current_shift_count = _int_or_none(
             current_deal.get("UF_CRM_WORKED_SHIFTS") if isinstance(current_deal, dict) else None
         )
-        if current_stage_id == desired_stage_id and current_shift_count == shift_count:
+        missing_premium = any(row.get(key) and not current_deal.get(field)
+                              for key, field in [("firstShiftDate", FIRST_FIELD), ("fifthShiftDate", FIFTH_FIELD)])
+        if current_stage_id == desired_stage_id and current_shift_count == shift_count and not missing_premium:
             results.append(
                 {
                     "employee": row.get("employee"),
@@ -89,6 +92,18 @@ def main() -> None:
                 ),
                 flush=True,
             )
+            continue
+
+        try:
+            milestone_transitions = ensure_premium_milestones(bitrix, row, current_deal)
+        except PremiumMilestoneError as error:
+            message = f"Синхронизация сделки {deal_id} остановлена: {error}"
+            if router is not None and router.admin_user_id:
+                router.max_client.send_text_to_user(router.admin_user_id, message)
+            results.append({"dealId": str(deal_id), "employee": row.get("employee"),
+                            "updated": False, "error": str(error), "commentId": None,
+                            "notifications": []})
+            print(json.dumps({"dealId": str(deal_id), "error": str(error)}, ensure_ascii=False), flush=True)
             continue
 
         update_ok = bitrix.update_deal(
@@ -141,6 +156,7 @@ def main() -> None:
                 "shiftCount": shift_count,
                 "updated": update_ok,
                 "commentId": comment_id,
+                "milestoneTransitions": milestone_transitions,
                 "notifications": notification_results,
             }
         )
@@ -165,6 +181,7 @@ def main() -> None:
         "sendNotifications": send_notifications,
         "summary": {
             "rows": len(rows),
+            "errors": sum(1 for item in results if item.get("error")),
             "updated": sum(1 for item in results if item["updated"]),
             "comments": sum(1 for item in results if item["commentId"] is not None),
             "notifications": sum(len(item["notifications"]) for item in results),

@@ -89,7 +89,7 @@ def _summary_text(
         f"— есть в табелях, но нет в Bitrix: {total_not_found}",
         f"— есть в Bitrix, но нет в табелях: {total_without_schedule}",
         "",
-        "Ошибки: нет",
+        f"Ошибки: {int(apply_summary.get('errors') or 0)}" if apply_summary.get("errors") else "Ошибки: нет",
     ]
     return "\n".join(lines)
 

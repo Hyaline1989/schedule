@@ -19,6 +19,7 @@ from schedule.dry_run import (
 from schedule.models import normalize_employee_name
 from schedule.name_aliases import candidate_names
 from schedule.name_matching import find_smart_name_match
+from schedule.not_found_exclusions import NotFoundExclusions
 from schedule.sources import spreadsheet_ids
 from schedule.statuses import build_employee_summaries
 from schedule.xlsx_schedules import parse_month_sheets
@@ -110,6 +111,7 @@ def main() -> None:
         end_of_watches,
         status_markers,
     )
+    not_found_exclusions = NotFoundExclusions.load()
     scoped = [(company, summary) for company, records in groups.items()
               for summary in build_employee_summaries(*records)]
     summaries = [summary for _, summary in scoped]
@@ -195,7 +197,7 @@ def main() -> None:
             if smart_match:
                 matches.extend(_deals_by_title(fuzzy_candidates, smart_match.name))
 
-        matches = object_deals(matches, company)
+        matches = _prefer_active_deals(object_deals(matches, company))
         if len(matches) != 1:
             all_stage_matches = []
             for candidate in candidate_names(summary.employee_name):
@@ -274,10 +276,20 @@ def main() -> None:
                     }
                 )
                 continue
+            reason = "not_found" if not matches else "ambiguous"
+            sources = _sources_for_employee(
+                sources_by_employee,
+                summary.employee_name,
+            )
+            if reason == "not_found" and not_found_exclusions.matches(
+                employee_name=summary.employee_name,
+                sources=sources,
+            ):
+                continue
             unresolved.append(
                 {
                     "employee": summary.employee_name,
-                    "reason": "not_found" if not matches else "ambiguous",
+                    "reason": reason,
                     "shiftCount": summary.shift_count,
                     "desiredStageId": str(summary.stage_id),
                     "endOfWatchDate": summary.end_of_watch_date.isoformat()
@@ -288,10 +300,7 @@ def main() -> None:
                     if summary.status_marker_date
                     else None,
                     "statusComment": summary.status_comment,
-                    "sources": _sources_for_employee(
-                        sources_by_employee,
-                        summary.employee_name,
-                    ),
+                    "sources": sources,
                 }
             )
             continue
@@ -331,6 +340,8 @@ def main() -> None:
                 "lastShiftDate": summary.last_shift_date.isoformat()
                 if summary.last_shift_date
                 else None,
+                "firstShiftDate": summary.first_shift_date.isoformat() if summary.first_shift_date else None,
+                "fifthShiftDate": summary.fifth_shift_date.isoformat() if summary.fifth_shift_date else None,
                 "settlementDate": summary.settlement_date.isoformat()
                 if summary.settlement_date
                 else None,
@@ -415,6 +426,16 @@ def _sources_for_employee(
         if normalize_employee_name(source_name) in names:
             sources.update(source_ids)
     return sorted(sources)
+
+
+def _prefer_active_deals(deals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Closed past assignments must not make an active assignment ambiguous."""
+    active = [
+        deal for deal in deals
+        if str(deal.get("STAGE_ID") or "") in ELIGIBLE_STAGE_IDS
+        and str(deal.get("STAGE_ID") or "") not in TERMINAL_STAGE_IDS
+    ]
+    return active or deals
 
 
 def _candidate_titles(deals: list[dict[str, Any]]) -> list[str]:
