@@ -64,6 +64,9 @@ def main() -> None:
         )
         missing_premium = any(row.get(key) and not current_deal.get(field)
                               for key, field in [("firstShiftDate", FIRST_FIELD), ("fifthShiftDate", FIFTH_FIELD)])
+        pending_path = Path("runtime/premium-pending") / f"{deal_id}.json"
+        if pending_path.exists() and json.loads(pending_path.read_text(encoding="utf-8")):
+            missing_premium = True
         if current_stage_id == desired_stage_id and current_shift_count == shift_count and not missing_premium:
             results.append(
                 {
@@ -95,7 +98,7 @@ def main() -> None:
             continue
 
         try:
-            milestone_transitions = ensure_premium_milestones(bitrix, row, current_deal)
+            milestone_transitions = ensure_premium_milestones(bitrix, row, current_deal, pending_dir="runtime/premium-pending")
         except PremiumMilestoneError as error:
             message = f"Синхронизация сделки {deal_id} остановлена: {error}"
             if router is not None and router.admin_user_id:

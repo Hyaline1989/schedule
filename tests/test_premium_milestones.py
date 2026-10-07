@@ -26,6 +26,9 @@ class FakeBitrix:
                 self.deal["STAGE_ID"] = fields["STAGE_ID"]
             if self.fills:
                 self.deal.update(fields)
+                if "STAGE_ID" in fields:
+                    field = FIRST_FIELD if fields["STAGE_ID"] == "UC_L9233X" else FIFTH_FIELD
+                    self.deal[field] = "2099-01-01"
             return True
         return dict(self.deal)
 
@@ -63,13 +66,13 @@ class PremiumMilestoneTests(unittest.TestCase):
         with self.assertRaises(PremiumMilestoneError):
             ensure_premium_milestones(b, {"desiredStageId": "16"}, b.deal)
 
-    def test_working_stage_records_actual_date_without_extra_transition(self):
+    def test_working_stage_records_actual_date_after_robot(self):
         b = FakeBitrix()
         row = self.row()
         row["desiredStageId"] = "UC_L9233X"
         ensure_premium_milestones(b, row, b.deal)
         self.assertEqual(b.deal[FIRST_FIELD], "2020-01-01")
-        self.assertEqual(b.transitions, [])
+        self.assertEqual(b.transitions, ["UC_L9233X"])
 
     def test_backfill_only_missing_fields(self):
         from types import SimpleNamespace
@@ -78,3 +81,17 @@ class PremiumMilestoneTests(unittest.TestCase):
         summary = SimpleNamespace(first_shift_date=date(2020, 1, 1), fifth_shift_date=date(2020, 1, 5))
         self.assertEqual(missing_dates(summary, {FIRST_FIELD: "2020-01-02"}),
                          {FIFTH_FIELD: "2020-01-05"})
+
+    def test_retry_restores_robot_date_from_pending_step(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        b = FakeBitrix()
+        b.deal.update({"STAGE_ID": "UC_L9233X", FIRST_FIELD: "2099-01-01"})
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "1.json"
+            path.write_text(json.dumps({FIRST_FIELD: "2020-01-01"}), encoding="utf-8")
+            ensure_premium_milestones(b, self.row(), b.deal, pending_dir=directory)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {})
+        self.assertEqual(b.deal[FIRST_FIELD], "2020-01-01")
+        self.assertEqual(b.transitions, [])
